@@ -5,63 +5,81 @@ import ProtectedRoute from '../components/ProtectedRoute';
 import DateSelector from '../components/DateSelector';
 import CourtTimelineArea from '../components/CourtTimelineArea';
 import BookingSummaryPanel from '../components/BookingSummaryPanel';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../../lib/supabaseClient';
+import { 
+  fetchCourtAvailability, 
+  createBooking, 
+  generateTimeSlots, 
+  isSlotBooked,
+  type CourtAvailability,
+  type BookingDetails 
+} from '../../lib/bookingUtils';
 
 interface TimeSlot {
   time: string;
   available: boolean;
   booked: boolean;
+  isoString: string;
 }
 
 interface Court {
+  id: string;
   name: string;
   timeSlots: TimeSlot[];
 }
 
 export default function BookingPage() {
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [courts, setCourts] = useState<Court[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
 
-  // Generate time slots from 8 AM to 8 PM
-  const generateTimeSlots = (): TimeSlot[] => {
-    const slots: TimeSlot[] = [];
-    for (let hour = 8; hour <= 20; hour++) {
-      const timeString = hour <= 12 ? 
-        `${hour === 12 ? 12 : hour} ${hour < 12 ? 'AM' : 'PM'}` :
-        `${hour - 12} PM`;
-      slots.push({
-        time: timeString,
-        available: true,
-        booked: Math.random() < 0.3 // 30% chance of being booked
-      });
+  // Load court availability data
+  const loadCourtData = async () => {
+    if (!user) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const courtAvailability = await fetchCourtAvailability(supabase, selectedDate);
+      const timeSlots = generateTimeSlots(selectedDate);
+      
+      const courtsData: Court[] = courtAvailability.map(court => ({
+        id: court.id,
+        name: court.name,
+        timeSlots: timeSlots.map(slot => ({
+          time: slot.time,
+          available: true,
+          booked: isSlotBooked(slot.isoString, court.bookedSlots),
+          isoString: slot.isoString
+        }))
+      }));
+      
+      setCourts(courtsData);
+    } catch (err) {
+      console.error('Error loading court data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load court availability');
+    } finally {
+      setIsLoading(false);
     }
-    return slots;
   };
 
-  // Generate courts data
-  const generateCourts = (): Court[] => {
-    const courtNames = ['Court 1', 'Court 2', 'Court 3', 'Court 4', 'Court 5', 'Court 6'];
-    return courtNames.map(name => ({
-      name,
-      timeSlots: generateTimeSlots()
-    }));
-  };
-
-  // Initialize courts data
+  // Load data when date changes or component mounts
   useEffect(() => {
-    setCourts(generateCourts());
-  }, []);
-
-  // Update courts when date changes
-  useEffect(() => {
-    setCourts(generateCourts());
-  }, [selectedDate]);
+    loadCourtData();
+  }, [selectedDate, user]);
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
     setSelectedSlot(null);
     setShowSummary(false);
+    setBookingSuccess(false);
   };
 
   const handleSlotSelect = (courtName: string, time: string) => {
@@ -78,18 +96,54 @@ export default function BookingPage() {
     }
   };
 
-  const handleConfirmBooking = () => {
-    if (selectedSlot) {
+  const handleConfirmBooking = async () => {
+    if (!selectedSlot || !user) return;
+    
+    try {
       const [courtName, time] = selectedSlot.split('-');
-      console.log(`Booking confirmed for ${courtName} at ${time} on ${selectedDate.toDateString()}`);
+      const court = courts.find(c => c.name === courtName);
       
-      // Reset selection
+      if (!court) {
+        throw new Error('Court not found');
+      }
+      
+      // Find the selected time slot to get the ISO string
+      const selectedTimeSlot = court.timeSlots.find(slot => slot.time === time);
+      if (!selectedTimeSlot) {
+        throw new Error('Time slot not found');
+      }
+      
+      // Calculate end time (1 hour duration)
+      const startTime = new Date(selectedTimeSlot.isoString);
+      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // Add 1 hour
+      
+      const bookingDetails: BookingDetails = {
+        userId: user.id,
+        courtId: court.id,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString()
+      };
+      
+      const { data, error } = await createBooking(supabase, bookingDetails);
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Reset selection and show success
       setSelectedSlot(null);
       setShowSummary(false);
+      setBookingSuccess(true);
       
-      // Here you would typically send the booking to a backend
-      // For now, we'll just show a success message
-      alert(`Booking confirmed for ${courtName} at ${time}!`);
+      // Reload court data to reflect the new booking
+      await loadCourtData();
+      
+      // Hide success message after 3 seconds
+      setTimeout(() => setBookingSuccess(false), 3000);
+      
+    } catch (err) {
+      console.error('Error creating booking:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create booking');
     }
   };
 
@@ -108,25 +162,49 @@ export default function BookingPage() {
             Book Your Court
           </h2>
 
+          {/* Success Message */}
+          {bookingSuccess && (
+            <div className="mb-6 bg-green-900/50 border border-green-500 text-green-300 px-4 py-3 rounded-lg text-center">
+              ✅ Booking confirmed successfully! Your court is reserved.
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg text-center">
+              ❌ {error}
+            </div>
+          )}
+
           {/* Date Selector */}
           <DateSelector 
             selectedDate={selectedDate}
             onDateSelect={handleDateSelect}
           />
 
-          {/* Court Timeline Area */}
-          <CourtTimelineArea
-            courts={courts}
-            selectedSlot={selectedSlot}
-            onSlotSelect={handleSlotSelect}
-          />
+          {/* Loading State */}
+          {isLoading ? (
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-8 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-lime-500 mx-auto mb-4"></div>
+              <p className="text-gray-300">Loading court availability...</p>
+            </div>
+          ) : (
+            <>
+              {/* Court Timeline Area */}
+              <CourtTimelineArea
+                courts={courts}
+                selectedSlot={selectedSlot}
+                onSlotSelect={handleSlotSelect}
+              />
 
-          {/* Instructions */}
-          <div className="mt-6 text-center">
-            <p className="text-gray-400 text-sm sm:text-base">
-              Select a date above, then choose your preferred court and time slot below.
-            </p>
-          </div>
+              {/* Instructions */}
+              <div className="mt-6 text-center">
+                <p className="text-gray-400 text-sm sm:text-base">
+                  Select a date above, then choose your preferred court and time slot below.
+                </p>
+              </div>
+            </>
+          )}
         </main>
 
         {/* Booking Summary Panel */}
