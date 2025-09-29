@@ -4,6 +4,7 @@ interface TimeSlot {
   time: string;
   available: boolean;
   booked: boolean;
+  isoString?: string;
 }
 
 interface CourtCardProps {
