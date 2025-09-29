@@ -2126,3 +2126,139 @@ The authentication system is now fully integrated and follows React best practic
 
 ---
 
+_**User (2025-09-29 00:08Z)**_
+
+Completely redesign the /booking page to create a highly intuitive, visually engaging, and court-centric booking experience. Move away from the generic calendar grid and implement a "Court Timeline" interface that allows users to easily visualize availability across all courts for a selected day. The new design must feel fluid, modern, and perfectly aligned with the established "lime green on black" aesthetic.
+
+2. Core UX Philosophy: "Court-First Timeline"
+The current grid is time-first. The new design will be court-first. The user's journey should be logical and frictionless:
+
+Select a Day: The primary filter.
+
+Scan the Courts: Visually see all available courts laid out.
+
+Find a Time: View a simple timeline of available slots for each specific court.
+
+Select & Confirm: A single click selects the slot, and a clear summary appears for a one-click confirmation.
+
+This approach is more intuitive as it directly answers the user's real question: "Which courts are free, and at what times, on the day I want to play?"
+
+3. Component-by-Component Redesign
+This redesign replaces the main calendar grid with a new, two-part system: the Date Selector and the Court Timeline Area.
+
+A. The Date Selector (Top of Page)
+
+Functionality: A horizontal 7-day scroller that allows the user to pick a day.
+
+Layout:
+
+Display 7 consecutive days.
+
+Each day item should show the day of the week (e.g., "MON") and the date (e.g., "29").
+
+Styling:
+
+Default State: Dark gray background (bg-gray-800), white text.
+
+"Today": The current day should have a subtle indicator, perhaps a small lime green dot below the date.
+
+Selected Day: The currently active day must be prominently highlighted with a solid lime green circle behind the date number, just like in the previous design.
+
+B. The Court Timeline Area (Main Content)
+
+Layout: A horizontal-scrolling container that holds a series of "Court Cards." On desktop, 3-4 courts should be visible at once. On mobile, it will be a 1-2 column layout.
+
+Each "Court Card" should contain:
+
+Court Header: A clean header with the court's name (e.g., "Court 1") and maybe an icon.
+
+Vertical Timeline: Below the header, a vertical list of available time slots for that specific court.
+
+Time Slot Blocks: Each slot (e.g., "8:00 AM", "9:00 AM") will be a self-contained block.
+
+State Styling for Time Slots:
+
+Available: A dark gray block with a subtle border and white text. The cursor must be a pointer.
+
+Booked: A disabled-looking, slightly transparent, or "filled-in" gray block with no hover effect. The text should be grayed out (e.g., "Booked").
+
+Hover State (for Available Slots): On hover, the block's border should turn bright lime green, and the background should lighten slightly to give immediate feedback.
+
+Selected State: When a user clicks an available slot, its background should turn solid lime green with black text. Only one slot can be "Selected" across all courts at any given time.
+
+C. The Booking Summary Panel
+
+Functionality: This panel is hidden by default. It will smoothly slide up from the bottom of the screen the moment a user selects a time slot.
+
+Layout: A sleek, full-width panel that overlays the very bottom of the Court Timeline area.
+
+Content:
+
+Left Side: A clear summary text, e.g., "Your Selection: Court 2 on Monday, September 29th at 10:00 AM."
+
+Right Side: A prominent "Confirm Booking" button with a lime green background and black text.
+
+Interaction: If the user clicks a different time slot, the summary text updates instantly. If they click the same selected slot again, it deselects, and the summary panel slides away.
+
+4. Interaction Flow (The User Journey)
+Page Load: The page loads with the current day selected and displays the court timelines for today. The Booking Summary is hidden.
+
+User Selects a New Date: Clicks on "TUE 30" in the Date Selector. The Court Timeline area instantly updates to show the availability for Tuesday the 30th (using static placeholder data for now).
+
+User Scans & Hovers: The user hovers over the "10:00 AM" slot on "Court 2." The slot's border turns lime green.
+
+User Selects a Slot: The user clicks the "10:00 AM" slot.
+
+The slot's background instantly turns solid lime green.
+
+The Booking Summary panel animates, sliding up from the bottom.
+
+The panel text reads: "Your Selection: Court 2 on Tuesday, September 30th at 10:00 AM."
+
+User Changes Mind: The user now clicks the "1:00 PM" slot on "Court 4."
+
+The "10:00 AM" slot on Court 2 reverts to its default "Available" state.
+
+The "1:00 PM" slot on Court 4 turns solid lime green.
+
+The summary panel's text updates to the new selection.
+
+User Confirms: The user clicks the "Confirm Booking" button. For now, this can just trigger a console.log message like Booking confirmed for Court 4 at 1:00 PM on Tue 30.
+
+---
+
+_**Assistant (default)**_
+
+I'll completely redesign the booking page with a court-first timeline interface that's much more intuitive and visually engaging. Let me implement this step by step.
+
+
+---
+
+Tool use: **todo_write**
+
+## Todo List
+
+- [-] Create Date Selector component with 7-day horizontal scroller
+- [ ] Design Court Timeline Area with horizontal scrolling court cards
+- [ ] Implement Court Card component with vertical timeline
+- [ ] Create time slot blocks with hover and selection states
+- [ ] Build Booking Summary Panel with slide-up animation
+- [ ] Implement selection logic and state management
+- [ ] Add responsive design for mobile and desktop
+- [ ] Replace existing booking page with new design
+
+---
+
+Let me start by creating the Date Selector component:
+
+
+---
+
+Tool use: **write**
+
+---
+
+
+
+---
+

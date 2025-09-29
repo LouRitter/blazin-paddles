@@ -96,7 +96,7 @@ export default function SignupPage() {
           
           <div className="mt-6 text-center">
             <p className="text-gray-400">
-              Already have an account?{' '}
+               Have an account already?{' '}
               <Link href="/login" className="text-lime-400 hover:text-lime-300 transition-colors">
                 Sign in here
               </Link>
