@@ -25,7 +25,7 @@ ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if they exist
 DROP POLICY IF EXISTS "Allow all users to read courts" ON public.courts;
-DROP POLICY IF EXISTS "Users can read own bookings" ON public.bookings;
+DROP POLICY IF EXISTS "Allow all users to read all bookings" ON public.bookings;
 DROP POLICY IF EXISTS "Users can create own bookings" ON public.bookings;
 DROP POLICY IF EXISTS "Users can update own bookings" ON public.bookings;
 DROP POLICY IF EXISTS "Users can delete own bookings" ON public.bookings;
@@ -34,8 +34,9 @@ DROP POLICY IF EXISTS "Users can delete own bookings" ON public.bookings;
 CREATE POLICY "Allow all users to read courts" ON public.courts
     FOR SELECT USING (true);
 
-CREATE POLICY "Users can read own bookings" ON public.bookings
-    FOR SELECT USING (auth.uid() = user_id);
+-- Allow all authenticated users to read ALL bookings (needed for availability checking)
+CREATE POLICY "Allow all users to read all bookings" ON public.bookings
+    FOR SELECT USING (auth.role() = 'authenticated');
 
 CREATE POLICY "Users can create own bookings" ON public.bookings
     FOR INSERT WITH CHECK (auth.uid() = user_id);

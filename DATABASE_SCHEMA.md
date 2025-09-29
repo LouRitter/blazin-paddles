@@ -37,9 +37,11 @@ CREATE TABLE public.bookings (
 -- Enable RLS
 ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 
--- Policy 1: Users can only read their own bookings
-CREATE POLICY "Users can read own bookings" ON public.bookings
-    FOR SELECT USING (auth.uid() = user_id);
+-- Policy 1: All authenticated users can read ALL bookings (needed for availability checking)
+-- This is required so that the fetchCourtAvailability function can see all bookings
+-- to determine which time slots are already taken and prevent double bookings
+CREATE POLICY "Allow all users to read all bookings" ON public.bookings
+    FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Policy 2: Users can create bookings for themselves
 CREATE POLICY "Users can create own bookings" ON public.bookings
