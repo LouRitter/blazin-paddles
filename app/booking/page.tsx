@@ -7,13 +7,14 @@ import CourtTimelineArea from '../components/CourtTimelineArea';
 import BookingSummaryPanel from '../components/BookingSummaryPanel';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
-import { 
-  fetchCourtAvailability, 
-  createBooking, 
-  generateTimeSlots, 
+import {
+  fetchCourtAvailability,
+  createBooking,
+  generateTimeSlots,
   isSlotBooked,
+  checkSlotAvailability,
   type CourtAvailability,
-  type BookingDetails 
+  type BookingDetails
 } from '../../lib/bookingUtils';
 
 interface TimeSlot {
@@ -50,16 +51,27 @@ export default function BookingPage() {
       const courtAvailability = await fetchCourtAvailability(supabase, selectedDate);
       const timeSlots = generateTimeSlots(selectedDate);
       
-      const courtsData: Court[] = courtAvailability.map(court => ({
-        id: court.id,
-        name: court.name,
-        timeSlots: timeSlots.map(slot => ({
-          time: slot.time,
-          available: true,
-          booked: isSlotBooked(slot.isoString, court.bookedSlots),
-          isoString: slot.isoString
-        }))
-      }));
+      console.log('Generated time slots:', timeSlots);
+      console.log('Court availability:', courtAvailability);
+      
+      const courtsData: Court[] = courtAvailability.map(court => {
+        const courtTimeSlots = timeSlots.map(slot => {
+          const isBooked = isSlotBooked(slot.isoString, court.bookedSlots);
+          console.log(`Court ${court.name}, Slot ${slot.time}: ${slot.isoString} -> Booked: ${isBooked}`);
+          return {
+            time: slot.time,
+            available: true,
+            booked: isBooked,
+            isoString: slot.isoString
+          };
+        });
+        
+        return {
+          id: court.id,
+          name: court.name,
+          timeSlots: courtTimeSlots
+        };
+      });
       
       setCourts(courtsData);
     } catch (err) {
@@ -75,24 +87,115 @@ export default function BookingPage() {
     loadCourtData();
   }, [selectedDate, user]);
 
+  // Set up real-time subscription for court availability updates
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('Setting up real-time subscription for bookings...');
+    
+    const subscription = supabase
+      .channel('bookings-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings'
+        },
+        (payload) => {
+          console.log('Real-time booking update received:', payload);
+          // Reload court data when any booking changes
+          loadCourtData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('Cleaning up real-time subscription...');
+      subscription.unsubscribe();
+    };
+  }, [user]);
+
+  // Set up periodic refresh as fallback (every 30 seconds)
+  useEffect(() => {
+    if (!user) return;
+
+    const interval = setInterval(() => {
+      console.log('Periodic refresh of court data...');
+      loadCourtData();
+    }, 30000); // 30 seconds
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [user]);
+
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
     setSelectedSlot(null);
     setShowSummary(false);
     setBookingSuccess(false);
+    setError(null); // Clear any previous errors
   };
 
-  const handleSlotSelect = (courtName: string, time: string) => {
+  const handleSlotSelect = async (courtName: string, time: string) => {
     const slotKey = `${courtName}-${time}`;
     
     if (selectedSlot === slotKey) {
       // Deselect if clicking the same slot
       setSelectedSlot(null);
       setShowSummary(false);
-    } else {
-      // Select new slot
+      return;
+    }
+
+    // Find the court and time slot
+    const court = courts.find(c => c.name === courtName);
+    if (!court) {
+      console.error('Court not found:', courtName);
+      return;
+    }
+
+    const timeSlot = court.timeSlots.find(slot => slot.time === time);
+    if (!timeSlot) {
+      console.error('Time slot not found:', time);
+      return;
+    }
+
+    // Check if slot is already booked
+    if (timeSlot.booked) {
+      console.log('Slot is already booked, cannot select');
+      setError('This time slot is no longer available. Please refresh and try again.');
+      return;
+    }
+
+    // Double-check availability with the backend before showing summary
+    try {
+      const startTime = new Date(timeSlot.isoString);
+      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+      
+      const { available } = await checkSlotAvailability(
+        supabase,
+        court.id,
+        startTime.toISOString(),
+        endTime.toISOString()
+      );
+
+      if (!available) {
+        console.log('Slot is no longer available on backend');
+        setError('This time slot was just booked by another user. Please refresh and try again.');
+        // Refresh the court data to get the latest state
+        await loadCourtData();
+        return;
+      }
+
+      // Slot is available, proceed with selection
       setSelectedSlot(slotKey);
       setShowSummary(true);
+      setError(null); // Clear any previous errors
+      
+    } catch (err) {
+      console.error('Error checking slot availability:', err);
+      setError('Unable to verify slot availability. Please try again.');
     }
   };
 
@@ -135,8 +238,12 @@ export default function BookingPage() {
       setShowSummary(false);
       setBookingSuccess(true);
       
-      // Reload court data to reflect the new booking
-      await loadCourtData();
+      // Force reload court data to reflect the new booking and prevent double bookings
+      console.log('Booking successful, reloading court data...');
+      // Small delay to ensure database has been updated
+      setTimeout(async () => {
+        await loadCourtData();
+      }, 500);
       
       // Hide success message after 3 seconds
       setTimeout(() => setBookingSuccess(false), 3000);
@@ -144,6 +251,9 @@ export default function BookingPage() {
     } catch (err) {
       console.error('Error creating booking:', err);
       setError(err instanceof Error ? err.message : 'Failed to create booking');
+      
+      // Reload court data to get the latest availability
+      await loadCourtData();
     }
   };
 
@@ -177,10 +287,27 @@ export default function BookingPage() {
           )}
 
           {/* Date Selector */}
-          <DateSelector 
-            selectedDate={selectedDate}
-            onDateSelect={handleDateSelect}
-          />
+          <div className="flex justify-between items-center mb-6">
+            <DateSelector 
+              selectedDate={selectedDate}
+              onDateSelect={handleDateSelect}
+            />
+            <button
+              onClick={loadCourtData}
+              disabled={isLoading}
+              className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-2"
+            >
+              <svg 
+                className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{isLoading ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+          </div>
 
           {/* Loading State */}
           {isLoading ? (
